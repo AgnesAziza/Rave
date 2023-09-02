@@ -7,18 +7,20 @@ import { useDispatch, useSelector } from 'react-redux';
 import { addRecording, deleteRecording } from '../redux/recordingsSlice';
 
 const RecordScreen = () => {
-  // Initialisation des hooks Redux pour la gestion d'état
+  // Utilisation des hooks Redux pour accéder et modifier l'état global
   const dispatch = useDispatch();
   const recordings = useSelector(state => state.recordings);
 
-  // Initialisation des states locaux
+  // Déclaration des états locaux
   const [recording, setRecording] = useState(); // Référence à l'enregistrement actuel
-  const [isRecording, setIsRecording] = useState(false); // État d'enregistrement
-  const [name, setName] = useState(''); // Nom de l'enregistrement actuel
-  const [sound, setSound] = useState(); // Référence au son pour la lecture
-  const [isPlaying, setIsPlaying] = useState(false); // État de lecture
-  const [currentPlayingUri, setCurrentPlayingUri] = useState(null); // URI de l'enregistrement actuellement en lecture
+  const [isRecording, setIsRecording] = useState(false); // Indique si l'appareil enregistre actuellement
+  const [name, setName] = useState(''); // Nom de l'enregistrement
+  const [sound, setSound] = useState(); // Référence au fichier audio pour la lecture
+  const [isPlaying, setIsPlaying] = useState(false); // Indique si un enregistrement est en cours de lecture
+  const [currentPlayingUri, setCurrentPlayingUri] = useState(null); // URI de l'enregistrement en cours de lecture
+  const [currentRecording, setCurrentRecording] = useState(); // Référence à l'enregistrement actuellement en cours
 
+  // Fonction pour démarrer l'enregistrement
   const startRecording = async () => {
     try {
       await Audio.requestPermissionsAsync();
@@ -32,51 +34,49 @@ const RecordScreen = () => {
     }
   };
 
+  // Fonction pour arrêter l'enregistrement
   const stopRecording = async () => {
     setIsRecording(false);
     await recording.stopAndUnloadAsync();
+    setCurrentRecording(recording); 
   };
 
+  // Fonction pour lire un enregistrement
   const playRecording = async (uri) => {
-    // Si le son est déjà en train d'être joué, le mettre en pause
-    if (sound && currentPlayingUri === uri) {
-      if (isPlaying) {
-        await sound.pauseAsync();
-        setIsPlaying(false);
-      } else {
-        await sound.playAsync();
-        setIsPlaying(true);
-      }
+    if (sound && isPlaying && currentPlayingUri === uri) {
+      await sound.pauseAsync();
+      setIsPlaying(false);
       return;
-    } else if (sound) { // Si un autre son est chargé, le décharger
-      await sound.unloadAsync();
     }
-  
-    // Sinon, charger le son depuis l'URI et le jouer
+    if (sound && !isPlaying && currentPlayingUri === uri) {
+      await sound.playAsync();
+      setIsPlaying(true);
+      return;
+    }
+    if (sound) {
+      await sound.unloadAsync();
+      setSound(undefined);
+      setIsPlaying(false);
+    }
     try {
       const { sound: newSound } = await Audio.Sound.createAsync({ uri: uri });
+      newSound.setOnPlaybackStatusUpdate(playbackStatusUpdate);
       setSound(newSound);
-      setIsPlaying(true);
       setCurrentPlayingUri(uri);
       await newSound.playAsync();
+      setIsPlaying(true);
     } catch (error) {
       console.error("Erreur lors du chargement ou de la lecture du son:", error);
     }
   };
-  
 
-  const stopPlayback = async () => {
-    if (sound) {
-      await sound.stopAsync();
-      setSound(undefined);
-      setIsPlaying(false);
-      setCurrentPlayingUri(null);
-    }
-  };
-
+  // Fonction pour sauvegarder un enregistrement
   const saveRecording = async () => {
-    const uri = recording.getURI();
-    // Vérifications avant de sauvegarder
+    if (!currentRecording) {
+      console.error("Aucun enregistrement n'a été trouvé.");
+      return;
+    }
+    const uri = currentRecording.getURI();
     if (!name || name.trim().length === 0) {
       alert("Veuillez donner un nom à votre enregistrement avant de le sauvegarder.");
       return;
@@ -86,8 +86,6 @@ const RecordScreen = () => {
       alert("Un enregistrement avec ce nom existe déjà. Veuillez choisir un autre nom.");
       return;
     }
-
-    // Verification du nom unique pour le fichier
     const uniqueName = name;
     let newUri = FileSystem.documentDirectory + uniqueName + '.m4a';
     let fileInfo = await FileSystem.getInfoAsync(newUri);
@@ -100,39 +98,49 @@ const RecordScreen = () => {
         counter++;
       }
     }
-    
-    // Déplace l'enregistrement vers le nouveau chemin d'accès
     await FileSystem.moveAsync({
       from: uri,
       to: newUri
     });
-
     const newRecording = {
       name: uniqueName,
       uri: newUri
     };
-
     dispatch(addRecording(newRecording));
     setName('');
     setRecording(undefined);
   };
 
-  // Fonction pour basculer entre la lecture et la pause
-  const togglePlayback = async () => {
-    if (sound) {
-      if (isPlaying) {
-        await sound.pauseAsync();
-      } else {
-        await sound.playAsync();
+  // Fonction pour suivre l'état de la lecture
+  const playbackStatusUpdate = (status) => {
+    if (!status.isLoaded) {
+      if (status.error) {
+        console.error(`Erreur de lecture : ${status.error}`);
       }
-      setIsPlaying(!isPlaying);
-    } else if (recording) {
-      await playRecording(recording.getURI());
+    } else {
+      if (status.didJustFinish) {
+        setIsPlaying(false);
+        setCurrentPlayingUri(null);
+      }
+    }
+  };
+
+  // Fonction pour arrêter la lecture
+  const stopPlayback = async () => {
+    if (sound) {
+      sound.setOnPlaybackStatusUpdate(null);
+      await sound.stopAsync();
+      setSound(undefined);
+      setIsPlaying(false);
+      setCurrentPlayingUri(null);
     }
   };
 
   return (
     <View style={styles.container}>
+      <Text style={styles.readyText}>Prêt pour enregistrer un son?</Text>
+
+      {/* Section d'enregistrement */}
       <TouchableOpacity 
         style={[styles.recordButton, {backgroundColor: isRecording ? '#E74C3C' : '#6883F5'}]}
         onPress={isRecording ? stopRecording : startRecording} 
@@ -144,69 +152,81 @@ const RecordScreen = () => {
         />
         <Text style={styles.recordButtonText}>{isRecording ? "Stop" : "Start Recording"}</Text>
       </TouchableOpacity>
-    
-      {!isRecording && (
-        <View style={styles.controlPanel}>
-          <TextInput 
-            placeholder="Nommez votre enregistrement"
-            value={name}
-            onChangeText={setName}
-            style={styles.textInput}
-          />
-          {recording && (
-            <TouchableOpacity style={[styles.saveButton, {backgroundColor: '#21a635'}]} onPress={saveRecording}>
-              <Ionicons name="save" size={20} color="white" />
-              <Text style={styles.saveButtonText}>Sauvegarder</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.playbackButton} onPress={togglePlayback} disabled={!recording}>
-            <Ionicons name={isPlaying ? "pause" : "play"} size={20} color="#2C3E50" />
-            <Text style={styles.playbackButtonText}>
-              {isPlaying ? "Pause" : (recording ? "Lire l'enregistrement" : "Aucun enregistrement en cours")}
-            </Text>
-          </TouchableOpacity>
-          {isPlaying && 
-                        <TouchableOpacity onPress={stopPlayback} style={[styles.stopButton, {marginTop: 10, marginBottom: 10, backgroundColor: '#E74C3C'}]}>
-                          <Ionicons name="stop" size={32} color="white" />
-                        </TouchableOpacity>}
-          {isPlaying && <Text style={styles.infoText}>Veuillez appuyer sur stop pour pouvoir relancer la lecture</Text>}
-        </View>
-      )}
 
+      {currentRecording && (
+        <TouchableOpacity 
+          style={[styles.playbackButton, styles.playbackContainer]} 
+          onPress={() => playRecording(currentRecording.getURI())}
+        >
+          <Ionicons 
+            name={currentPlayingUri === currentRecording.getURI() && isPlaying ? "pause" : "play"} 
+            size={32} 
+            color="#2C3E50"
+          />
+          <Text style={styles.playbackButtonText}>Lecture de votre enregistrement en cours</Text>
+        </TouchableOpacity>
+      )}
+      <View style={styles.controlPanel}>
+        <TextInput 
+          placeholder="Nommez votre enregistrement"
+          value={name}
+          onChangeText={setName}
+          style={styles.textInput}
+        />
+        <View style={styles.warningContainer}>
+          <Ionicons name="information-circle-outline" size={24} color="#34495E" />
+          <Text style={styles.warningText}>
+            Si vous ne sauvegardez pas votre enregistrement avant d&apos;en recommencer un autre, celui-ci sera perdu.
+          </Text>
+        </View>
+
+        <TouchableOpacity 
+          style={[styles.saveButton, {backgroundColor: '#21a635'}]} 
+          onPress={saveRecording}     
+        >
+          <Ionicons name="save" size={20} color="white" />
+          <Text style={styles.saveButtonText}>Sauvegarder</Text>
+        </TouchableOpacity>
+            
+        {/* Ligne de séparation */}
+        <View style={styles.separator}></View>
+
+      </View>
+      {/* Section de lecture */}
+      <Text style={styles.sectionHeader}>Mes enregistrements</Text>
       <FlatList
         data={recordings}
         keyExtractor={(item, index) => item.name + index}
         renderItem={({ item }) => (
           <View style={styles.listItem}>
             <Text style={styles.listItemText}>{item.name}</Text>
-            <Ionicons 
-              name={currentPlayingUri === item.uri && isPlaying ? "pause" : "play"} 
-              size={32} 
-              color="green" 
+            <Ionicons
+              name={currentPlayingUri === item.uri && isPlaying ? "pause" : "play"}
+              size={32}
+              color="green"
               onPress={() => playRecording(item.uri)} 
             />
-
-            <Ionicons 
-              name="stop" 
-              size={32} 
-              color="red" 
-              onPress={stopPlayback}
+            <Ionicons
+              name="stop"
+              size={32}
+              color="red"
+              onPress={stopPlayback} 
             />
-            <Ionicons 
-              name="trash" 
-              size={32} 
-              color="red" 
+            <Ionicons
+              name="trash"
+              size={32}
+              color="red"
               onPress={async () => {
                 await FileSystem.deleteAsync(item.uri);
                 dispatch(deleteRecording(item.name));
-              }}
+              }} 
             />
           </View>
         )}
       />
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -215,6 +235,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f5f5f5'
   },
+  sectionHeader: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 20,
+    marginBottom: 10,
+    color: '#34495E'
+  },
+  
   recordButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -228,6 +256,14 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
   },
+  readyText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+    color: '#34495E'
+  },
+  
   controlPanel: {
     width: '90%',
     alignItems: 'center',
@@ -266,9 +302,18 @@ const styles = StyleSheet.create({
     color: '#2C3E50',
     fontWeight: 'bold'
   },
-  stopButton: {
-    padding: 10
+  playbackContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+    padding: 10,
+    marginTop: 10,
+    width: '80%',
+    borderWidth: 1,
+    borderColor: 'black'
   },
+
   infoText: {
     marginTop: 10,
     color: '#2C3E50',
@@ -295,6 +340,28 @@ const styles = StyleSheet.create({
   },
   listItemText: {
     fontWeight: 'bold'
+  },
+  separator: {
+    height: 1,
+    width: '90%',
+    backgroundColor: '#34495E',
+    marginVertical: 20
+  },
+  warningContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 10,  
+    padding: 5,  
+    backgroundColor: '#f5f5f5',
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#dcdcdc'
+  },
+  warningText: {
+    marginLeft: 10,  
+    color: '#34495E',
+    flexWrap: 'wrap', 
+    flex: 1  
   }
 });
 
