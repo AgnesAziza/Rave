@@ -9,7 +9,11 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@expo/vector-icons": "^13.0.0",
     "@react-native-async-storage/async-storage": "1.18.2",
+    "@react-native-community/viewpager": "5.0.11",
+    "@react-native-picker/picker": "^2.5.0",
+    "@react-native/metro-config": "^0.72.11",
     "@react-navigation/bottom-tabs": "^6.5.8",
     "@react-navigation/material-top-tabs": "^6.6.3",
     "@react-navigation/native": "^6.1.7",
@@ -19,18 +23,26 @@
     "axios": "^1.4.0",
     "expo": "~49.0.7",
     "expo-av": "~13.4.1",
+    "expo-document-picker": "~11.5.4",
     "expo-file-system": "~15.4.3",
+    "expo-permissions": "~14.2.1",
     "expo-status-bar": "~1.6.0",
     "react": "18.2.0",
     "react-native": "0.72.3",
+    "react-native-get-random-values": "~1.9.0",
+    "react-native-pager-view": "^6.2.0",
+    "react-native-permissions": "^3.8.4",
     "react-native-tab-view": "^3.5.2",
     "react-native-toast-message": "^2.1.6",
     "react-redux": "^8.1.2",
     "redux": "^4.2.1",
-    "redux-persist": "^6.0.0"
+    "redux-persist": "^6.0.0",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "eslint": "^8.48.0",
+    "eslint-plugin-react": "^7.33.2"
   },
   "private": true
 }
