@@ -4,6 +4,8 @@ import { View, TextInput, StyleSheet, Text, TouchableOpacity } from 'react-nativ
 import { useDispatch } from 'react-redux';  // Import des hooks Redux
 import axios from 'axios';  // Import d'Axios pour les appels HTTP
 import Toast from 'react-native-toast-message'; 
+import MusicNotesSvg from '../assets/musicNotessvg';
+
 
 // Import des actions de Redux
 import { setConnectionInfo, setConnectionStatus } from '../redux/connectionSlice';
@@ -55,7 +57,10 @@ const HomeScreen = () => {
   return (
     <View style={styles.container}>
       <View style={styles.messageContainer}>
-        <Text style={styles.highlightedText}>Bienvenue sur rave !</Text>
+        <Text style={styles.highlightedText}>Bienvenue sur Rave !</Text>
+      </View>
+      <View style={styles.musicSvg}>
+        <MusicNotesSvg />
       </View>
       <View style={styles.messageContainer}>
         <Text style={styles.welcomeMessage}>Pour te connecter au serveur et transformer ton audio, merci de rentrer ton adresse IP et ton Port !</Text>
@@ -138,6 +143,12 @@ const styles = StyleSheet.create({
 
   messageContainer: {
     marginBottom: 10,  
+  },
+  musicSvg: {
+    alignSelf: 'center', 
+    width: 200,
+    height: 200,
+    marginBottom: 20, 
   },
 
 
